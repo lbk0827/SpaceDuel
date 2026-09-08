@@ -66,19 +66,24 @@ export function effectiveStats(mods, base, tuning = {}) {
 export function spawnShip(arena, tuning, rnd = Math.random) {
   const dir = rnd() < 0.5 ? 1 : -1;
   const margin = 1.2;
-  const y = arena.halfH * (0.35 + rnd() * 0.5);        // 위쪽 절반
+  // 높이: 방의 대부분(위아래 벽 근처만 제외)에서 랜덤
+  const y = arena.halfH * (-0.65 + rnd() * 1.4);
   const speed = tuning.itemShipSpeed ?? 6;
   const drops = Math.max(1, Math.round(tuning.itemsPerPass ?? 2));
+  // 투하 지점: 방 폭을 drops 구간으로 나누고 각 구간 안에서 랜덤 (층화 샘플링)
+  // → 매번 다른 자리에 떨어지면서도 서로 뭉치지 않는다
+  const inner = arena.halfW - 1.0;                 // 벽에서 1m 여유
+  const segW = (inner * 2) / drops;
+  const xs = Array.from({ length: drops }, (_, i) => {
+    const lo = -inner + segW * i + ITEM_RADIUS;
+    const hi = -inner + segW * (i + 1) - ITEM_RADIUS;
+    return lo + rnd() * Math.max(0, hi - lo);
+  });
+  xs.sort((a, b) => (dir > 0 ? a - b : b - a));    // 진행 방향 순
   return {
     x: dir > 0 ? -arena.halfW - margin : arena.halfW + margin,
     y, dir, speed,
-    // 투하 지점 = 방을 drops+1 등분한 경계들 (진행 방향 순)
-    dropXs: Array.from({ length: drops }, (_, i) => {
-      const t = (i + 1) / (drops + 1);
-      const from = dir > 0 ? -arena.halfW : arena.halfW;
-      const to = dir > 0 ? arena.halfW : -arena.halfW;
-      return from + (to - from) * t;
-    }),
+    dropXs: xs,
   };
 }
 

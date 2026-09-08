@@ -99,14 +99,37 @@ test('effectiveStats: 탄창을 먹으면 에너지 모드 + 탄약 1+개수 (�
   assert.equal(effectiveStats(m, base, T).energyMax, 4, '상한 4');
 });
 
-test('spawnShip: 방 밖에서 시작해 안쪽으로 향하고, 투하 지점은 방 안에 균등 분포', () => {
+test('spawnShip: 방 밖에서 시작해 안쪽으로 향하고, 투하 지점은 방 안(벽 1m 여유)', () => {
   const ship = spawnShip(arena, T, () => 0.1);   // dir = +1
   assert.equal(ship.dir, 1);
   assert.ok(ship.x < -arena.halfW, '왼쪽 밖에서 시작');
   assert.equal(ship.dropXs.length, 2);
-  for (const x of ship.dropXs) assert.ok(Math.abs(x) < arena.halfW, `투하 x ${x} 방 안`);
+  for (const x of ship.dropXs) assert.ok(Math.abs(x) <= arena.halfW - 1, `투하 x ${x} 방 안`);
   assert.ok(ship.dropXs[0] < ship.dropXs[1], '진행 방향 순서');
-  assert.ok(ship.y > 0 && ship.y < arena.halfH, '위쪽 절반');
+  assert.ok(Math.abs(ship.y) < arena.halfH, '방 높이 안');
+});
+
+test('spawnShip: 난수가 다르면 투하 지점·높이가 달라진다 (고정 자리가 아니다)', () => {
+  const seqA = [0.1, 0.2, 0.3, 0.9], seqB = [0.1, 0.8, 0.9, 0.2];
+  const mk = (seq) => { let i = 0; return () => seq[i++ % seq.length]; };
+  const a = spawnShip(arena, T, mk(seqA));
+  const b = spawnShip(arena, T, mk(seqB));
+  assert.notDeepEqual(a.dropXs, b.dropXs, '투하 x 가 달라야 한다');
+  assert.notEqual(a.y, b.y, '높이가 달라야 한다');
+});
+
+test('spawnShip: 투하 지점은 서로 다른 구간에 하나씩 — 뭉치지 않는다', () => {
+  for (let trial = 0; trial < 50; trial++) {
+    const ship = spawnShip(arena, { ...T, itemsPerPass: 3 });
+    const xs = [...ship.dropXs].sort((p, q) => p - q);
+    for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= 2 * ITEM_RADIUS, `간격 ${xs[i] - xs[i - 1]}`);
+  }
+});
+
+test('spawnShip: 높이가 위쪽 절반에만 몰리지 않는다', () => {
+  let below = 0;
+  for (let i = 0; i < 200; i++) if (spawnShip(arena, T).y < 0) below++;
+  assert.ok(below > 40 && below < 160, `아래쪽 비율 ${below}/200`);
 });
 
 test('spawnShip: 반대 방향도 대칭으로 동작', () => {
