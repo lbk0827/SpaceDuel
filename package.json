@@ -1,0 +1,13 @@
+{
+  "name": "recoil-duel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@dimforge/rapier2d-compat": "^0.14.0",
+    "esbuild": "^0.24.0"
+  }
+}

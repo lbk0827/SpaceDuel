@@ -1,0 +1,47 @@
+# Recoil Duel
+
+우주인 둘(플레이어 vs AI)의 레이저 결투. **입력은 클릭 하나** — 총구가 향한 방향으로 레이저가 나가고, 몸은 반동으로 반대로 밀리며 회전한다. 반동이 유일한 이동·조준 수단. 한 방 즉사, 3선승.
+
+설계: [`design.md`](design.md)
+
+## 실행
+
+- **더블클릭:** `dist/index.html` (Rapier2D WASM 인라인, 서버·인터넷 불필요, 약 1.5MB)
+- **개발:** `python -m http.server 8766` 로 이 폴더를 열고 `index.html` (Rapier 는 CDN)
+
+```bash
+npm install      # 최초 1회 (esbuild, rapier2d-compat — 빌드 전용)
+npm test         # 순수 로직 25개 (geom / laser / firegate / ai)
+npm run build    # → dist/index.html
+```
+
+## 조작·규칙
+
+- 클릭(어디든) = 발사. 총구 방향 = 몸이 향한 방향(점선 가이드). 반동은 총구 위치에 반대 방향 임펄스 → 밀림 + 어깨 지렛대만큼 회전(항상 같은 쪽).
+- 파랑 = 플레이어, 빨강 = AI. 맞으면 즉사, 라운드 시작 즉시 발사 가능. 동시 명중은 무효.
+- 탄이 상대에게 맞을 것 같으면 슬로모션.
+- 스폰: 좌/우, Y 를 다르게(라운드마다 교대).
+
+## 튠 패널 (`` ` `` 키 / `?dev=1`)
+
+중력 · **몸 형태 ball/capsule**(다음 라운드부터) · 반동 임펄스 · 총구 높이(지렛대 = 회전량) · 감쇠/마찰/반발 · 자립 토크(기본 0) · 레이저 속도 · **발사 모드 cooldown/energy** · 쿨다운 · 에너지 최대/충전 · 슬로모 배율/예측 · **AI 허용각/반응지연/재배치 사격** · 선승 · 시작 잠금 · 총구 가이드 표시.
+AI 는 명중 예측(지금 쏘면 실제로 맞는가)·회피 사격·똑똑한 재배치를 쓰며 기본값이 강하다 — `AI 반응 지연`을 늘리거나 `AI 회피 예측`을 0 으로 두면 쉬워진다.
+
+패널 하단 버튼: **현재 값을 기본값으로 저장**(이 브라우저에 저장, 재빌드 후에도 유지) · **설정 JSON 복사**(코드 기본값으로 굽고 싶을 때 전달) · **공장 기본값으로**.
+
+콘솔 디버그: `window.__rd` — `state()`, `score()`, `body('player'|'ai')`, `bolts()`, `fire(id)`, `startRound()`.
+
+## 구조
+
+```
+src/
+  tuning.js    파라미터·월드 상수·스폰
+  geom.js      순수 기하(회전, 선분-캡슐 스윕)              [테스트]
+  laser.js     탄 진행·명중·슬로모 예측(엔진 밖 스윕)        [테스트]
+  firegate.js  발사 제약 상태기계(cooldown / energy)         [테스트]
+  ai.js        예측 조준 결정                                [테스트]
+  physics.js   Rapier2D: 방·캡슐·반동 임펄스·고정 스텝
+  sprites.js   우주인 SVG(색 파라미터) → Image
+  renderer.js  Canvas 2D
+  hud.js / panel.js / game.js
+```
