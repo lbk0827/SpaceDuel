@@ -58,11 +58,19 @@ export function createHud(root) {
     /** 내가 가진 아이템 효과 */
     setMods(mods) {
       if (!modsEl) return;
-      const key = mods ? Object.keys(ITEM_DEFS).map((k) => k + (mods[k] || 0)).join('') : 'none';
+      const key = mods ? (mods.suit === false ? 'bare|' : 'suit|') + Object.keys(ITEM_DEFS).map((k) => k + (mods[k] || 0)).join('') : 'none';
       if (key === lastModsKey) return;
       lastModsKey = key;
       const chips = [];
       if (mods) {
+        if (mods.suit === false) {
+          const el = document.createElement('span');
+          el.className = 'chip';
+          el.style.color = '#fb7185';
+          el.style.borderColor = '#fb7185';
+          el.textContent = '우주복 없음!';
+          chips.push(el);
+        }
         for (const k of Object.keys(ITEM_DEFS)) {
           const n = mods[k] || 0;
           if (!n) continue;

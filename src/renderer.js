@@ -1,5 +1,5 @@
 // Canvas 2D 렌더. 월드(원점 중심, y 위) → 화면(y 아래) 변환을 여기서 한 번만 한다.
-import { SLOT_COLORS, spriteFor } from './sprites.js';
+import { SLOT_COLORS, spriteFor, itemIconFor } from './sprites.js';
 import { ITEM_DEFS, ITEM_RADIUS } from './items.js';
 
 const SVG_PX_PER_M = 100;
@@ -32,7 +32,8 @@ export function createRenderer(canvas, WORLD) {
 
   function drawBody(slot, tuning, shape) {
     const round = !(shape && shape.halfHeight > 0);
-    const img = spriteFor(slot.index, !round);
+    const suited = !(slot.mods && slot.mods.suit === false);
+    const img = spriteFor(slot.index, !round, suited);
     const { pose, facing } = slot.snap;
     ctx.save();
     ctx.translate(sx(pose.x), sy(pose.y));
@@ -121,21 +122,26 @@ export function createRenderer(canvas, WORLD) {
     ctx.save();
     ctx.shadowColor = def.color;
     ctx.shadowBlur = 14;
-    ctx.fillStyle = def.color;
-    ctx.globalAlpha = 0.9;
+    // 어두운 받침 + 종류색 테두리, 그 위에 그림 아이콘
+    ctx.fillStyle = '#0b1030cc';
     ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(x - r, y - r, r * 2, r * 2, r * 0.35) : ctx.rect(x - r, y - r, r * 2, r * 2);
+    ctx.roundRect ? ctx.roundRect(x - r, y - r, r * 2, r * 2, r * 0.3) : ctx.rect(x - r, y - r, r * 2, r * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = def.color;
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.fillStyle = '#0b1030';
-    ctx.font = `700 ${Math.max(8, r * 0.62)}px system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(def.short[0], x, y + 1);
+    const img = itemIconFor(it.kind);
+    if (img.complete && img.naturalWidth) {
+      const s = r * 1.7;
+      ctx.drawImage(img, x - s / 2, y - s / 2, s, s);
+    } else {
+      ctx.fillStyle = def.color;
+      ctx.font = `700 ${Math.max(8, r * 0.62)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(def.short[0], x, y + 1);
+    }
     ctx.restore();
   }
 
@@ -259,7 +265,7 @@ export function createRenderer(canvas, WORLD) {
       // 플래시
       for (let i = flashes.length - 1; i >= 0; i--) {
         const f = flashes[i]; f.age += dtReal;
-        const dur = f.kind === 'hit' ? 0.5 : f.kind === 'block' ? 0.35 : f.kind === 'item' ? 0.4 : 0.1;
+        const dur = f.kind === 'hit' ? 0.5 : f.kind === 'block' ? 0.35 : f.kind === 'suit' ? 0.5 : f.kind === 'item' ? 0.4 : 0.1;
         const k = 1 - f.age / dur;
         if (k <= 0) { flashes.splice(i, 1); continue; }
         ctx.globalAlpha = k;
@@ -268,6 +274,13 @@ export function createRenderer(canvas, WORLD) {
         else if (f.kind === 'block') {
           ctx.strokeStyle = ITEM_DEFS.barrier.color; ctx.lineWidth = 5;
           ctx.beginPath(); ctx.arc(sx(f.x), sy(f.y), (1 - k) * 0.7 * scale + 8, 0, Math.PI * 2); ctx.stroke();
+        } else if (f.kind === 'suit') {
+          // 우주복 조각이 사방으로 튄다
+          ctx.fillStyle = '#e2e8f0';
+          for (let j = 0; j < 8; j++) {
+            const a = (j / 8) * Math.PI * 2, d = (1 - k) * 1.1 * scale;
+            ctx.fillRect(sx(f.x) + Math.cos(a) * d - 3, sy(f.y) - Math.sin(a) * d - 3, 6, 6);
+          }
         } else if (f.kind === 'item') {
           ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(sx(f.x), sy(f.y), (1 - k) * 1.0 * scale + 4, 0, Math.PI * 2); ctx.stroke();

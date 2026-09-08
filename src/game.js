@@ -11,7 +11,7 @@ import { createHud } from './hud.js';
 import { createPanel } from './panel.js';
 import { SLOT_COLORS } from './sprites.js';
 import {
-  emptyMods, applyItem, consumeBarrier, effectiveStats,
+  emptyMods, applyItem, takeHit, effectiveStats,
   spawnShip, stepShip, stepItems, pickups, nextKind,
 } from './items.js';
 import { createNet, MAX_PLAYERS } from './net.js';
@@ -249,11 +249,11 @@ function fixedStep(dt) {
 function applyHit({ shooter, ownerIndex, targetId, point }) {
   const victim = slotById(targetId);
   if (!victim || !victim.alive) return;
-  // 배리어가 있으면 1회 막고 살아남는다
-  const guard = consumeBarrier(victim.mods);
-  if (guard.blocked) {
-    victim.mods = guard.mods;
-    renderer.addFlash(point.x, point.y, 'block', victim.index);
+  // 배리어 → 우주복 → 사망. 우주복이 깨지면 빤스 상태로 살아남는다
+  const r = takeHit(victim.mods);
+  victim.mods = r.mods;
+  if (!r.died) {
+    renderer.addFlash(point.x, point.y, r.absorbedBy === 'barrier' ? 'block' : 'suit', victim.index);
     syncScores();
     return;
   }
@@ -640,6 +640,13 @@ window.__rd = {
   shipTimer: () => shipTimer,
   mods: () => slots.map((s) => Object.assign({ id: s.id }, s.mods)),
   grantItem,
+  /** 디버그: 슬롯에 피격 1회를 주입 (배리어→우주복→사망 흐름 확인용) */
+  debugHit(slotId) {
+    const snap = physics.get(slotId);
+    const pt = snap ? { x: snap.pose.x, y: snap.pose.y } : { x: 0, y: 0 };
+    applyHit({ shooter: slotId, ownerIndex: 0, targetId: slotId, point: pt });
+    if (isAuthority()) checkRoundEnd();
+  },
   requestStart,
   fire, startRound, startMatch, soloKinds, startSolo, startCoop, enterWaiting, startOnline, showLobby,
 };

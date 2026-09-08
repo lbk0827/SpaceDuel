@@ -1,31 +1,45 @@
 // 아이템(순수 로직). 렌더·물리·네트워크를 모른다.
 // 배달선이 n초마다 방을 가로지르며 아이템을 떨어뜨리고, 몸이 닿으면 획득한다.
+//
+// 목숨 모델: 우주복(suit) 이 첫 목숨이다. 맞으면 우주복이 깨져 빤스 상태가 되고, 그 상태에서 또 맞으면 죽는다.
+// 배리어(아이템) 는 우주복 바깥의 추가 방어막(최대 3겹). 아머(아이템) 는 빤스 상태의 우주복을 복구한다 — 둘은 다른 아이템.
+// 피격 순서: 배리어 → 우주복 → 사망.
 
 export const ITEM_RADIUS = 0.4;
 
 export const ITEM_DEFS = {
   barrier:   { label: '배리어',      short: 'BARRIER', color: '#7dd3fc', max: 3 },
+  armor:     { label: '아머',        short: 'ARMOR',   color: '#f8fafc' },
   weaponSpd: { label: '레이저 속도',  short: 'SPD',     color: '#fbbf24', max: 3 },
   magazine:  { label: '탄창',        short: 'MAG',     color: '#a3e635', max: 3 },
 };
 export const ITEM_KINDS = Object.keys(ITEM_DEFS);
 
-/** 슬롯별 아이템 효과 누적치. 라운드마다 초기화한다 */
-export const emptyMods = () => ({ barrier: 0, weaponSpd: 0, magazine: 0 });
+/** 슬롯별 상태. 라운드마다 초기화한다 */
+export const emptyMods = () => ({ suit: true, barrier: 0, weaponSpd: 0, magazine: 0 });
 
-/** 아이템 1개 획득 (상한까지). mods 를 변이하지 않고 새 객체를 돌려준다 */
+/** 아이템 1개 획득. mods 를 변이하지 않고 새 객체를 돌려준다 */
 export function applyItem(mods, kind) {
+  const next = { ...emptyMods(), ...mods };
+  if (kind === 'armor') {
+    next.suit = true;                      // 빤스 → 우주복 복구 (이미 입었으면 변화 없음)
+    return next;
+  }
   const def = ITEM_DEFS[kind];
-  if (!def) return { ...mods };
-  const next = { ...mods };
-  next[kind] = Math.min(def.max, (next[kind] ?? 0) + 1);
+  if (!def) return next;
+  next[kind] = Math.min(def.max ?? 99, (next[kind] ?? 0) + 1);
   return next;
 }
 
-/** 배리어 1회 소모. 막았으면 { blocked: true, mods } */
-export function consumeBarrier(mods) {
-  if (!mods || mods.barrier <= 0) return { blocked: false, mods: { ...mods } };
-  return { blocked: true, mods: { ...mods, barrier: mods.barrier - 1 } };
+/**
+ * 피격 1회 처리. 배리어가 있으면 배리어가, 없고 우주복이 있으면 우주복이 깨진다. 둘 다 없으면 죽는다.
+ * @returns { died, absorbedBy: 'barrier'|'suit'|null, mods }
+ */
+export function takeHit(mods) {
+  const m = { ...emptyMods(), ...mods };
+  if (m.barrier > 0) return { died: false, absorbedBy: 'barrier', mods: { ...m, barrier: m.barrier - 1 } };
+  if (m.suit) return { died: false, absorbedBy: 'suit', mods: { ...m, suit: false } };
+  return { died: true, absorbedBy: null, mods: m };
 }
 
 /** 효과가 반영된 실제 수치. base = { laserSpeed, fireMode, energyMax } */
@@ -39,6 +53,7 @@ export function effectiveStats(mods, base, tuning = {}) {
     fireMode: mag > 0 ? 'energy' : base.fireMode,
     energyMax: mag > 0 ? Math.min(4, 1 + mag) : base.energyMax,
     barrier: mods?.barrier ?? 0,
+    suit: mods?.suit ?? true,
   };
 }
 
@@ -46,7 +61,7 @@ export function effectiveStats(mods, base, tuning = {}) {
 
 /**
  * 배달선 한 대를 만든다. 방 위쪽을 가로지르며 drops 개를 같은 간격으로 떨어뜨린다.
- * @returns { x, y, dir, speed, dropsLeft, nextDropX }
+ * @returns { x, y, dir, speed, dropXs }
  */
 export function spawnShip(arena, tuning, rnd = Math.random) {
   const dir = rnd() < 0.5 ? 1 : -1;
@@ -57,8 +72,7 @@ export function spawnShip(arena, tuning, rnd = Math.random) {
   return {
     x: dir > 0 ? -arena.halfW - margin : arena.halfW + margin,
     y, dir, speed,
-    dropsLeft: drops,
-    // 첫 투하 지점 = 방을 drops+1 등분한 첫 경계
+    // 투하 지점 = 방을 drops+1 등분한 경계들 (진행 방향 순)
     dropXs: Array.from({ length: drops }, (_, i) => {
       const t = (i + 1) / (drops + 1);
       const from = dir > 0 ? -arena.halfW : arena.halfW;
@@ -114,7 +128,7 @@ export function pickups(items, bodies) {
   return out;
 }
 
-/** 다음 아이템 종류 — 순환이라 한 종류만 몰리지 않는다 */
+/** 다음 아이템 종류 — 순환이라 한 종류만 몰리지 않는다 (4종) */
 export function nextKind(counter) {
   return ITEM_KINDS[counter % ITEM_KINDS.length];
 }
