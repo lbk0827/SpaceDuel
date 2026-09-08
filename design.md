@@ -102,4 +102,4 @@
 
 ## 9. 산출물
 
-`dist/index.html` standalone(더블클릭 실행) + 개발용 `index.html`(정적 서버) + `node --test test/*.test.js` + README.
+루트 `index.html`(= `dist/index.html`, standalone·더블클릭·Pages 서빙용) + 개발 템플릿 `dev.html`(정적 서버) + `node --test test/*.test.js` + README. 빌드 스탬프를 화면에 표시해 배포 버전을 눈으로 확인한다.

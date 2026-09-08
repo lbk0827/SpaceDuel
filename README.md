@@ -6,8 +6,11 @@
 
 ## 실행
 
-- **더블클릭:** `dist/index.html` (Rapier2D WASM 인라인, 서버·인터넷 불필요, 약 1.5MB)
-- **개발:** `python -m http.server 8766` 로 이 폴더를 열고 `index.html` (Rapier 는 CDN)
+- **온라인:** https://lbk0827.github.io/SpaceDuel/ — 루트가 standalone 빌드라 단일 파일로 서빙된다(모듈별 캐시 문제 없음). 화면 우하단 `build <시각>` 이 지금 띄운 빌드 시각
+- **더블클릭:** `index.html` 또는 동일 내용인 `dist/index.html` (Rapier2D WASM 인라인, 서버·인터넷 불필요, 약 1.5MB)
+- **개발:** `python -m http.server 8766` 로 이 폴더를 열고 **`dev.html`** (Rapier 는 CDN, 소스 수정 후 새로고침만)
+
+빌드는 `dev.html` 을 템플릿으로 읽어 `index.html` + `dist/index.html` 을 만든다. **소스만 고치고 빌드를 잊으면 배포에 반영되지 않는다.**
 
 ```bash
 npm install      # 최초 1회 (esbuild, rapier2d-compat — 빌드 전용)
