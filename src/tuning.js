@@ -5,10 +5,11 @@ export const WORLD = {
   wallThickness: 0.5,
   capsule: { halfHeight: 0.35, radius: 0.25 }, // 총 높이 1.2 = 2×(0.35+0.25), 폭 0.5 (bodyShape=capsule 일 때)
   ball: { halfHeight: 0, radius: 0.45 },       // 다리 없는 둥근 몸 (기본). 착지해도 서지 않고 굴러 임의 방향을 본다
-  // 원점 = 방 중심, y 위쪽. 한쪽이 높으면 다른 쪽이 낮게, 라운드마다 교대
-  spawn: (round) => ({
-    player: { x: -5, y: 2 + (round % 2) * 1.5, facing: 1 },
-    ai: { x: 5, y: 3.5 - (round % 2) * 1.5, facing: -1 },
+  // 원점 = 방 중심(y ∈ [-4.5, 4.5]), y 위쪽. 몸 반지름 0.45 라 실사용 범위는 약 ±4.0
+  // 유저 요청: 플레이어는 위, AI 는 확실히 아래로 (Y 간격 6.2m). 라운드 교대는 하지 않음
+  spawn: () => ({
+    player: { x: -5, y: 3.2, facing: 1 },
+    ai: { x: 5, y: -3.0, facing: -1 },
   }),
   boltLength: 1.0,
   boltTrail: 0.15,
@@ -43,7 +44,7 @@ export const meta = [
 ];
 
 export const defaults = Object.freeze({
-  gravity: -1,        // 유저 결정: 거의 무중력에 가까운 느린 낙하
+  gravity: 0,         // 유저 확정: 완전 무중력 (닫힌 방 + 반발 0.6 이라 떠다니며 튕긴다)
   bodyShape: 'ball',
   recoilImpulse: 6,
   gunOffsetY: 0.30,
@@ -53,7 +54,7 @@ export const defaults = Object.freeze({
   friction: 0.6,
   restitution: 0.6,   // 벽·바닥에서 튕김 (유저 요청)
   uprightTorque: 0,
-  laserSpeed: 25,
+  laserSpeed: 13,     // 유저 확정: 느린 탄 — 궤적이 잘 보이고 피할 여지가 생긴다
   fireMode: 'cooldown',
   cooldown: 0.5,
   energyMax: 3,

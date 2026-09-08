@@ -31,16 +31,16 @@
 | 항목 | 값 |
 |---|---|
 | 화면 | 가로 16:9 컨테이너(뷰포트에 맞춰 스케일). 월드 16 × 9 m, 1m = 화면폭/16 px |
-| 중력 | **−1 m/s²** (슬라이더 −30~0). −12 → −6 → −1 로 낮춤(유저 결정, 거의 무중력) |
+| 중력 | **0** (슬라이더 −30~0). −12 → −6 → −1 → 0 (유저 확정: 완전 무중력. 닫힌 방 + 반발 0.6 이라 떠다니며 튕긴다) |
 | 캐릭터 | **기본 = 다리 없는 둥근 몸(원, 반지름 0.45)** — 착지해도 서지 않고 굴러 임의 방향을 본다(유저 피드백: 캡슐+다리는 착지하면 항상 서 버림). 패널 `bodyShape` 로 캡슐(폭 0.5·높이 1.2)로 되돌릴 수 있음. 질량 1. 각감쇠 0.8 / 선감쇠 0.1 / 마찰 0.6 / **반발 0.6**(벽·바닥에서 튕김, 유저 요청. 결합 규칙 Max) (전부 슬라이더, 즉시 반영) |
 | 총 | 몸 로컬 좌표 (앞 +0.45, 위 +0.30). "위 +0.30" = **지렛대**(슬라이더 0~0.6). 총구 방향 = 몸의 +x 축(우주인이 바라보는 쪽) |
-| 발사 | 총구에서 레이저 탄 생성, 속도 25 m/s(슬라이더 10~60). 동시에 총구 위치에 임펄스 `recoilImpulse`(기본 6 N·s, 슬라이더 1~15)를 총구 반대 방향으로 |
+| 발사 | 총구에서 레이저 탄 생성, 속도 **13** m/s(슬라이더 10~60, 유저 확정 — 느려서 궤적이 보이고 피할 여지가 있다). 동시에 총구 위치에 임펄스 `recoilImpulse`(기본 6 N·s, 슬라이더 1~15)를 총구 반대 방향으로 |
 | 탄 | 길이 1.0 m 광선 + 0.15s 잔상. 벽에 닿으면 소멸. 자기 몸 무시 |
 | 즉사 | 탄이 상대 캡슐과 교차하면 라운드 종료 |
 | 라운드 | 3선승(슬라이더 1~5). 시작 발사 잠금 없음(spawnLock 0, 슬라이더로 켤 수 있음). 승자 배너 1.5s → 다음 라운드. 매치 종료 → "다시" |
 | 발사 제약 | `fireMode`: `cooldown`(기본 0.5s, 슬라이더 0.1~2.0) / `energy`(최대 3발, 1.2s 당 1발 충전, 둘 다 슬라이더). 둘 다 HUD 표시(쿨 = 링, 에너지 = 칸) |
 | 슬로모션 | 매 프레임 탄마다: 현재 위치에서 진행 방향으로 `속도 × lookahead(0.25s)` 만큼 선분을 그어 **상대 캡슐(현재 자세)** 과 교차하면 `timeScale = slowmoScale(0.25)`. 교차하지 않으면 1.0 으로 복귀. 화면 가장자리를 살짝 어둡게(비네트) — 이것 하나만 |
-| 스폰 | 라운드 r: 플레이어 (−5, 2 + (r%2)·1.5), AI (+5, 3.5 − (r%2)·1.5). 즉 한쪽이 높으면 다른 쪽이 낮다. 초기 회전 0(서 있음), 서로를 마주봄 |
+| 스폰 | 플레이어 (−5, +3.2) · AI (+5, −3.0) — **Y 간격 6.2m**(유저 요청으로 AI 를 확실히 아래로, 라운드 교대 없음). 초기 회전 0, 서로를 마주봄 |
 
 ### 규약 (리뷰 반영)
 
@@ -83,7 +83,9 @@
 
 ## 6. 파라미터(튠 패널)
 
-`gravity −12` · `recoilImpulse 6` · `gunOffsetY 0.30`(지렛대) · `gunOffsetX 0.45` · `angularDamping 0.8` · `linearDamping 0.1` · `friction 0.6` · `restitution 0.1` · `uprightTorque 0`(자립, 기본 끔) · `laserSpeed 25` · `fireMode cooldown|energy` · `cooldown 0.5` · `energyMax 3` · `energyRegen 1.2`(초/발) · `slowmoScale 0.25` · `slowmoLookahead 0.25` · `aiToleranceDeg 6` · `aiReaction 0.15` · `aiRepositionAfter 2.0` · `roundsToWin 3` · `spawnLock 1.0`
+**2026-09-08 유저 확정 기본값** (패널 JSON 그대로 코드에 반영): `gravity 0` · `laserSpeed 13` · `restitution 0.6` · `bodyShape ball` · `fireMode cooldown 0.5` · `spawnLock 0` · AI `허용각 3° / 반응 0.05 / 재배치 1.2 / 회피예측 0.45`
+
+`gravity 0` · `recoilImpulse 6` · `gunOffsetY 0.30`(지렛대) · `gunOffsetX 0.45` · `angularDamping 0.8` · `linearDamping 0.1` · `friction 0.6` · `restitution 0.1` · `uprightTorque 0`(자립, 기본 끔) · `laserSpeed 25` · `fireMode cooldown|energy` · `cooldown 0.5` · `energyMax 3` · `energyRegen 1.2`(초/발) · `slowmoScale 0.25` · `slowmoLookahead 0.25` · `aiToleranceDeg 6` · `aiReaction 0.15` · `aiRepositionAfter 2.0` · `roundsToWin 3` · `spawnLock 1.0`
 
 ## 7. 테스트
 
