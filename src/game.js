@@ -11,7 +11,7 @@ import { createHud } from './hud.js';
 import { createPanel } from './panel.js';
 import { SLOT_COLORS } from './sprites.js';
 import { createNet } from './net.js';
-import { showStart, showWaiting, ensureRoom, roomFromUrl, transportFromUrl } from './lobby.js';
+import { showStart, showSoloSetup, showWaiting, ensureRoom, roomFromUrl, transportFromUrl } from './lobby.js';
 
 await RAPIER.init();
 
@@ -241,7 +241,10 @@ function checkRoundEnd() {
       title: winner.kind === 'local' ? '승리!' : winner.label + ' 승리',
       text: scoreLine(),
       color,
-      buttons: [{ label: '다시', onClick: () => startMatch(slots.map((s) => s.kind)) }],
+      buttons: [
+        { label: '다시', onClick: () => startMatch(slots.map((s) => s.kind)) },
+        { label: '처음 화면', onClick: () => (net ? enterWaiting() : showLobby()), secondary: true },
+      ],
     });
     return;
   }
@@ -359,10 +362,27 @@ function soloKinds() {
   return kinds;
 }
 
-function startSolo() {
+/** 봇 수를 정해 혼자 하기 시작. n 을 주면 tuning 에도 반영해 다음에도 그 값이 기본이 된다 */
+function startSolo(botCount) {
+  if (typeof botCount === 'number') tuning.botCount = botCount;
   if (net) { net.leave(); net = null; }
   mode = 'solo';
   startMatch(soloKinds());
+}
+
+/** 시작 화면 → 봇 수 선택 */
+function showLobby() {
+  mode = 'lobby';
+  state = 'idle';
+  bolts = [];
+  showStart(hud, {
+    onSolo: () => showSoloSetup(hud, {
+      current: tuning.botCount,
+      onPick: startSolo,
+      onBack: showLobby,
+    }),
+    onCoop: startCoop,
+  });
 }
 
 /** 명단 순서가 슬롯 순서 — 내 자리는 local, 나머지는 remote */
@@ -378,7 +398,7 @@ function enterWaiting() {
     code: roomFromUrl(), transport: net.transport, roster: net.roster,
     selfId: net.selfId, isHost: net.isHost(),
     onStart: () => { startOnline(); broadcastState('round'); },
-    onSolo: startSolo,
+    onSolo: () => showSoloSetup(hud, { current: tuning.botCount, onPick: startSolo, onBack: enterWaiting }),
   });
 }
 
@@ -397,7 +417,7 @@ async function startCoop() {
     hud.showBanner({
       title: '연결 실패',
       text: String(err && err.message ? err.message : err),
-      buttons: [{ label: '혼자 하기', onClick: startSolo }],
+      buttons: [{ label: '혼자 하기', onClick: showLobby }],
     });
     return;
   }
@@ -434,7 +454,7 @@ async function startCoop() {
 }
 
 if (roomFromUrl()) startCoop();                                   // 초대 링크로 들어옴 → 대기실
-else showStart(hud, { onSolo: startSolo, onCoop: startCoop });
+else showLobby();
 requestAnimationFrame(frame);
 
 // 디버그 훅
@@ -449,5 +469,5 @@ window.__rd = {
   roster: () => (net ? net.roster : []),
   isHost: () => isAuthority(),
   selfId: () => (net ? net.selfId : null),
-  fire, startRound, startMatch, soloKinds, startSolo, startCoop, enterWaiting, startOnline,
+  fire, startRound, startMatch, soloKinds, startSolo, startCoop, enterWaiting, startOnline, showLobby,
 };

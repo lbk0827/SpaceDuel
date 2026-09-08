@@ -20,8 +20,25 @@ export function showStart(hud, { onSolo, onCoop }) {
     title: 'SPACE DUEL',
     text: '클릭 한 번으로 발사 — 반동으로 움직여 상대를 맞히세요',
     buttons: [
-      { label: '혼자 하기 (봇과)', onClick: onSolo },
+      { label: '혼자 하기', onClick: onSolo },
       { label: '함께 하기 (친구 초대)', onClick: onCoop, secondary: true },
+    ],
+  });
+}
+
+/** 혼자 하기 설정: 봇 몇 명과 붙을지 */
+export function showSoloSetup(hud, { current, onPick, onBack }) {
+  const label = (n) => (n === 0 ? '연습 (봇 없음)' : `봇 ${n}명 (${n + 1}인 난전)`)
+    + (n === current ? ' ✓' : '');
+  hud.showBanner({
+    title: '혼자 하기',
+    text: '봇 수를 고르세요<br><small style="opacity:.7">인원이 많으면 방이 넓어집니다 · 연습은 라운드가 끝나지 않습니다</small>',
+    buttons: [
+      { label: label(1), onClick: () => onPick(1) },
+      { label: label(2), onClick: () => onPick(2) },
+      { label: label(3), onClick: () => onPick(3) },
+      { label: label(0), onClick: () => onPick(0), secondary: true },
+      { label: '뒤로', onClick: onBack, secondary: true },
     ],
   });
 }
