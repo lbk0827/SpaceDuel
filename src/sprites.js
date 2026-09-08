@@ -65,5 +65,21 @@ export function loadSprite(svg) {
   return img;
 }
 
-export const PLAYER_COLORS = { suit: '#dfe7ff', accent: '#3b82f6' };
-export const AI_COLORS = { suit: '#ffe3e3', accent: '#ef4444' };
+/** 슬롯 인덱스별 색: 0 파랑(방장) · 1 빨강 · 2 노랑 · 3 초록 */
+export const SLOT_COLORS = [
+  { suit: '#dfe7ff', accent: '#3b82f6', bolt: '#3b9dff', name: '파랑' },
+  { suit: '#ffe3e3', accent: '#ef4444', bolt: '#ff4b4b', name: '빨강' },
+  { suit: '#fff6d9', accent: '#eab308', bolt: '#ffd43b', name: '노랑' },
+  { suit: '#dcffe4', accent: '#22c55e', bolt: '#4ade80', name: '초록' },
+];
+
+const spriteCache = new Map();
+/** 슬롯 인덱스 + 몸 형태별 스프라이트 (캐시) */
+export function spriteFor(index, legs) {
+  const key = `${index}:${legs ? 'legs' : 'ball'}`;
+  if (!spriteCache.has(key)) {
+    const c = SLOT_COLORS[index % SLOT_COLORS.length];
+    spriteCache.set(key, loadSprite(astronautSvg({ suit: c.suit, accent: c.accent, legs })));
+  }
+  return spriteCache.get(key);
+}

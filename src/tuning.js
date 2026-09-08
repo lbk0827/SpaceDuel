@@ -1,16 +1,9 @@
 // 파라미터 단일 출처. 순수 로직 모듈은 이 파일을 import 하지 않고 값을 인자로 받는다.
 
 export const WORLD = {
-  width: 16, height: 9,        // m. 닫힌 방
-  wallThickness: 0.5,
+  wallThickness: 0.5,   // 방 크기는 인원수에 따라 arena.js 가 정한다
   capsule: { halfHeight: 0.35, radius: 0.25 }, // 총 높이 1.2 = 2×(0.35+0.25), 폭 0.5 (bodyShape=capsule 일 때)
   ball: { halfHeight: 0, radius: 0.45 },       // 다리 없는 둥근 몸 (기본). 착지해도 서지 않고 굴러 임의 방향을 본다
-  // 원점 = 방 중심(y ∈ [-4.5, 4.5]), y 위쪽. 몸 반지름 0.45 라 실사용 범위는 약 ±4.0
-  // 유저 요청: 플레이어는 위, AI 는 확실히 아래로 (Y 간격 6.2m). 라운드 교대는 하지 않음
-  spawn: () => ({
-    player: { x: -5, y: 3.2, facing: 1 },
-    ai: { x: 5, y: -3.0, facing: -1 },
-  }),
   boltLength: 1.0,
   boltTrail: 0.15,
   physicsStep: 1 / 120,
@@ -38,6 +31,9 @@ export const meta = [
   { key: 'aiReaction',        label: 'AI 반응 지연(s)',         min: 0,   max: 1,    step: 0.05 },
   { key: 'aiRepositionAfter', label: 'AI 재배치 사격(s)',       min: 0.5, max: 6,    step: 0.1 },
   { key: 'aiDodgeLookahead',  label: 'AI 회피 예측(s, 0=끔)',    min: 0,   max: 1,    step: 0.05 },
+  { key: 'botCount',          label: '봇 수(혼자 하기)',        min: 0,   max: 3,    step: 1 },
+  { key: 'arenaWidthPerPlayer', label: '3인 이상 1명당 방 확대(m)', min: 0, max: 8,  step: 0.5 },
+  { key: 'scaleWithArena',    label: '방 크기에 속도 비례',      type: 'bool' },
   { key: 'roundsToWin',       label: '선승',                  min: 1,   max: 5,    step: 1 },
   { key: 'spawnLock',         label: '시작 발사 잠금(s)',       min: 0,   max: 3,    step: 0.1 },
   { key: 'aimGuide',          label: '총구 방향 가이드 표시',    type: 'bool' },
@@ -65,6 +61,9 @@ export const defaults = Object.freeze({
   aiReaction: 0.05,
   aiRepositionAfter: 1.2,
   aiDodgeLookahead: 0.45,  // 이 시간 안에 맞을 탄이면 회피 사격 검토
+  botCount: 3,
+  arenaWidthPerPlayer: 3,
+  scaleWithArena: true,
   roundsToWin: 3,
   spawnLock: 0,     // 태어나면서 바로 쏠 수 있음 (유저 결정)
   aimGuide: true,
