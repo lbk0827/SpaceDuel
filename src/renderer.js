@@ -88,6 +88,38 @@ export function createRenderer(canvas, WORLD) {
     ctx.restore();
   }
 
+  /** 내 캐릭터 표식 — 몸 회전과 무관하게 화면 정방향. 색이 슬롯마다 달라 표식이 있어야 즉시 찾는다 */
+  function drawYouMarker(slot, shape) {
+    const r = (shape && shape.halfHeight ? shape.halfHeight : 0) + (shape && shape.radius ? shape.radius : 0.45);
+    const x = sx(slot.snap.pose.x), y = sy(slot.snap.pose.y);
+    const color = boltColor(slot.index);
+    ctx.save();
+    // 몸 주변 링
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.arc(x, y, (r + 0.16) * scale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // 머리 위 삼각 표식(게이지보다 조금 더 위)
+    ctx.globalAlpha = 1;
+    const ty = y - (r + 0.72) * scale;
+    const w = 0.16 * scale, h = 0.2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(x - w, ty);
+    ctx.lineTo(x + w, ty);
+    ctx.lineTo(x, ty + h);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   return {
     canvas,
     setArena(next) { arena = next; fit(); },
@@ -124,6 +156,7 @@ export function createRenderer(canvas, WORLD) {
 
       // 몸 (살아 있고 자세를 얻은 슬롯만)
       const shown = view.slots.filter((s) => s.alive && s.snap);
+      for (const s of shown) if (s.isLocal) drawYouMarker(s, view.shape);   // 링은 몸 아래에
       for (const s of shown) drawBody(s, view.tuning, view.shape);
       for (const s of shown) drawGauge(s, s.gauge, view.shape);
 

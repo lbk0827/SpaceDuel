@@ -10,7 +10,7 @@ import { createRenderer } from './renderer.js';
 import { createHud } from './hud.js';
 import { createPanel } from './panel.js';
 import { SLOT_COLORS } from './sprites.js';
-import { createNet } from './net.js';
+import { createNet, MAX_PLAYERS } from './net.js';
 import { showStart, showSoloSetup, showWaiting, ensureRoom, roomFromUrl, transportFromUrl } from './lobby.js';
 
 await RAPIER.init();
@@ -49,6 +49,9 @@ const aliveSlots = () => slots.filter((s) => s.alive);
 // ---- 네트워크 ----
 let net = null;                 // null = 혼자 하기
 let mode = 'lobby';             // lobby | waiting | solo | online
+/** 슬롯 순서대로의 주인: peerId 또는 'bot'. 방장이 정해서 배포한다(모두 같은 배치를 봐야 한다) */
+let slotOwners = [];
+let onlineFillBots = false;
 let poseTimer = 0;
 const POSE_INTERVAL = 1 / 30;
 /** 라운드를 최종 판정하는 쪽 (혼자 하기는 나, 온라인은 방장) */
@@ -101,7 +104,10 @@ function startRound() {
 }
 
 function syncScores() {
-  hud.setScores(slots.map((s) => ({ index: s.index, score: s.score, alive: s.alive, label: s.label })));
+  hud.setScores(slots.map((s) => ({
+    index: s.index, score: s.score, alive: s.alive,
+    label: s.kind === 'local' ? 'YOU(' + SLOT_COLORS[s.index % SLOT_COLORS.length].name + ')' : s.label,
+  })));
 }
 
 /** 발사. 원격·봇도 같은 경로를 쓴다. override = { pos, dir } 면 그 총구를 그대로 사용 */
@@ -256,18 +262,38 @@ function checkRoundEnd() {
 // ---- 네트워크 배선 ----
 function broadcastState(phase, extra) {
   if (!net || !isAuthority()) return;
-  net.send('state', Object.assign({ phase, round, scores: slots.map((s) => s.score) }, extra || {}));
+  net.send('state', Object.assign(
+    { phase, round, owners: slotOwners, scores: slots.map((s) => s.score) },
+    extra || {},
+  ));
+}
+
+const applyScores = (d) => {
+  if (!Array.isArray(d.scores)) return;
+  slots.forEach((s, i) => { if (d.scores[i] != null) s.score = d.scores[i]; });
+  syncScores();
+};
+
+/** 방장의 라운드 시작을 따른다. 슬롯 배치가 바뀌었으면 다시 만든다(친구 합류·이탈) */
+function applyRoundStart(d) {
+  const owners = Array.isArray(d.owners) && d.owners.length ? d.owners : slotOwners;
+  const changed = owners.join(',') !== slotOwners.join(',');
+  slotOwners = owners;
+  round = d.round != null ? d.round : round;
+  if (changed || mode !== 'online' || slots.length !== owners.length) {
+    mode = 'online';
+    startMatch(kindsFromOwners(slotOwners));
+  } else {
+    startRound();
+  }
+  applyScores(d);
 }
 
 /** 방장이 보내온 라운드·결과를 따른다 */
 function applyRemoteState(d) {
   if (isAuthority()) return;
-  if (Array.isArray(d.scores)) slots.forEach((s, i) => { if (d.scores[i] != null) s.score = d.scores[i]; });
-  if (d.phase === 'round') {
-    round = d.round != null ? d.round : round;
-    startRound();
-    return;
-  }
+  if (d.phase === 'round') { applyRoundStart(d); return; }
+  applyScores(d);
   const w = slots[d.winner];
   const color = w ? SLOT_COLORS[w.index % SLOT_COLORS.length].bolt : '';
   state = d.phase === 'matchEnd' ? 'matchEnd' : 'roundEnd';
@@ -345,7 +371,7 @@ function frame(now) {
   }
 
   const view = slots.map((s) => ({
-    id: s.id, index: s.index, alive: s.alive,
+    id: s.id, index: s.index, alive: s.alive, isLocal: s.kind === 'local',
     snap: s.alive ? physics.get(s.id) : null,
     gauge: s.alive ? s.gate.state() : null,
   }));
@@ -385,9 +411,9 @@ function showLobby() {
   });
 }
 
-/** 명단 순서가 슬롯 순서 — 내 자리는 local, 나머지는 remote */
-function kindsFromRoster(roster) {
-  return roster.map((id) => (id === net.selfId ? 'local' : 'remote'));
+/** 슬롯 주인 목록 → 내 관점의 종류. 'bot' 은 방장이 조작한다 */
+function kindsFromOwners(owners) {
+  return owners.map((o) => (o === 'bot' ? 'bot' : (net && o === net.selfId ? 'local' : 'remote')));
 }
 
 function enterWaiting() {
@@ -396,15 +422,23 @@ function enterWaiting() {
   bolts = [];
   showWaiting(hud, {
     code: roomFromUrl(), transport: net.transport, roster: net.roster,
-    selfId: net.selfId, isHost: net.isHost(),
-    onStart: () => { startOnline(); broadcastState('round'); },
+    selfId: net.selfId, isHost: net.isHost(), botCount: Math.max(1, tuning.botCount),
+    onStart: (opts) => { startOnline(opts); broadcastState('round'); },
     onSolo: () => showSoloSetup(hud, { current: tuning.botCount, onPick: startSolo, onBack: enterWaiting }),
   });
 }
 
-function startOnline() {
+/** 방장만 호출. 사람 명단에 (원하면) 봇을 채워 슬롯 배치를 정하고 시작한다 */
+function startOnline(opts) {
+  if (opts && typeof opts.fillBots === 'boolean') onlineFillBots = opts.fillBots;
   mode = 'online';
-  startMatch(kindsFromRoster(net.roster));
+  const owners = net.roster.slice(0, MAX_PLAYERS);
+  if (onlineFillBots) {
+    const want = Math.min(MAX_PLAYERS, 1 + Math.max(1, tuning.botCount));
+    while (owners.length < want) owners.push('bot');
+  }
+  slotOwners = owners;
+  startMatch(kindsFromOwners(slotOwners));
 }
 
 async function startCoop() {
@@ -436,19 +470,18 @@ async function startCoop() {
     // 대기실에 있는 참가자는 방장의 첫 'round' 를 받고 입장한다(이 메시지가 유일한 계기다)
     if (mode !== 'online') {
       if (d.phase !== 'round') return;
-      startOnline();
-      if (Array.isArray(d.scores)) slots.forEach((s, i) => { if (d.scores[i] != null) s.score = d.scores[i]; });
-      syncScores();
+      applyRoundStart(d);
       return;
     }
     applyRemoteState(d);
   });
   net.onRoster(() => {
-    if (mode === 'waiting') enterWaiting();                       // 인원 표시 갱신
-    else if (mode === 'online' && net.roster.length !== slots.length && isAuthority()) {
-      startOnline();                                              // 입장·이탈 → 방장이 재구성
-      broadcastState('round');
-    }
+    if (mode === 'waiting') { enterWaiting(); return; }           // 인원 표시 갱신
+    if (mode !== 'online' || !isAuthority()) return;
+    // 사람이 들어오거나 나갔으면 방장이 슬롯을 다시 짜고 새 라운드로 알린다
+    const humans = slotOwners.filter((o) => o !== 'bot');
+    const same = humans.length === net.roster.length && humans.every((id, i) => id === net.roster[i]);
+    if (!same) { startOnline(); broadcastState('round'); }
   });
   enterWaiting();
 }
@@ -469,5 +502,6 @@ window.__rd = {
   roster: () => (net ? net.roster : []),
   isHost: () => isAuthority(),
   selfId: () => (net ? net.selfId : null),
+  owners: () => slotOwners,
   fire, startRound, startMatch, soloKinds, startSolo, startCoop, enterWaiting, startOnline, showLobby,
 };

@@ -44,18 +44,20 @@ export function showSoloSetup(hud, { current, onPick, onBack }) {
 }
 
 /** 대기실: 인원·링크 복사·시작(방장) */
-export function showWaiting(hud, { code, transport, roster, selfId, isHost, onStart, onSolo }) {
+export function showWaiting(hud, { code, transport, roster, selfId, isHost, botCount = 3, onStart, onSolo }) {
   const n = roster.length;
   const link = linkForRoom(code, transport);
   const dots = roster.map((id, i) => {
     const c = SLOT_COLORS[i % SLOT_COLORS.length];
-    const me = id === selfId ? ' (나)' : '';
+    const me = id === selfId ? ` <b>(나 · ${c.name})</b>` : '';
     return `<span style="color:${c.bolt}">●</span> P${i + 1}${me}`;
   }).join(' &nbsp; ');
 
   const buttons = [];
   if (isHost) {
-    buttons.push({ label: n >= 2 ? `시작 (${n}명)` : '혼자라도 시작', onClick: onStart });
+    // 혼자여도 봇을 채워 바로 시작할 수 있다. 친구는 나중에 들어와도 다음 라운드부터 합류한다.
+    if (n >= 2) buttons.push({ label: `시작 (${n}명)`, onClick: () => onStart({ fillBots: false }) });
+    else buttons.push({ label: `봇 넣고 시작 (봇 ${botCount}명)`, onClick: () => onStart({ fillBots: true }) });
   }
   buttons.push({
     label: '초대 링크 복사',
@@ -68,7 +70,8 @@ export function showWaiting(hud, { code, transport, roster, selfId, isHost, onSt
   if (onSolo) buttons.push({ label: '혼자 하기로', secondary: true, onClick: onSolo });
 
   const waitingNote = n < 2
-    ? '<br><small style="opacity:.7">친구가 링크를 열면 여기 자동으로 나타납니다 (공용 릴레이라 몇 초~수십 초 걸릴 수 있어요)</small>'
+    ? '<br><small style="opacity:.7">친구가 링크를 열면 여기 자동으로 나타납니다 (공용 릴레이라 몇 초~수십 초 걸릴 수 있어요)'
+      + '<br>기다리지 않고 <b>봇 넣고 시작</b>해도 됩니다 — 친구는 들어오는 대로 다음 라운드부터 합류합니다</small>'
     : '';
   hud.showBanner({
     title: `방 ${code}`,
