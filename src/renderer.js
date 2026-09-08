@@ -94,17 +94,7 @@ export function createRenderer(canvas, WORLD) {
     const x = sx(slot.snap.pose.x), y = sy(slot.snap.pose.y);
     const color = boltColor(slot.index);
     ctx.save();
-    // 몸 주변 링
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.55;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.arc(x, y, (r + 0.16) * scale, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    // 머리 위 삼각 표식(게이지보다 조금 더 위)
-    ctx.globalAlpha = 1;
+    // 머리 위 삼각 표식만 (몸 주변 링은 유저 요청으로 제거)
     const ty = y - (r + 0.72) * scale;
     const w = 0.16 * scale, h = 0.2 * scale;
     ctx.beginPath();

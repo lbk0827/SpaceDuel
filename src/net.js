@@ -12,7 +12,12 @@ export function rosterOf(selfId, peerIds) {
   return [selfId, ...peerIds].filter(Boolean).sort().slice(0, MAX_PLAYERS);
 }
 export const slotIndexOf = (roster, id) => roster.indexOf(id);
-export const hostOf = (roster) => roster[0];
+/**
+ * 방장: 지정된 사람(방을 만든 사람)이 명단에 있으면 그 사람, 없으면 정렬 0번이 승계.
+ * 초대 링크에 방장 id 를 실어 나르므로 모두가 같은 결론을 낸다.
+ */
+export const hostOf = (roster, preferredId) =>
+  (preferredId && roster.includes(preferredId) ? preferredId : roster[0]);
 
 /** 방 코드: 헷갈리는 문자(0/O/1/I) 제외 */
 export function makeRoomCode(len = 4) {
@@ -24,13 +29,14 @@ export function makeRoomCode(len = 4) {
 
 const TYPES = ['fire', 'hit', 'pose', 'state', 'presence'];
 
-export async function createNet({ roomCode, transport = 'trystero' }) {
+export async function createNet({ roomCode, transport = 'trystero', hostId = null }) {
   const handlers = new Map(TYPES.map((t) => [t, []]));
   let rosterListener = () => {};
   let roster = [];
   let peerIds = [];
   let selfId;
   let impl;
+  let preferredHost = hostId;
 
   function refreshRoster() {
     const next = rosterOf(selfId, peerIds);
@@ -102,7 +108,10 @@ export async function createNet({ roomCode, transport = 'trystero' }) {
     get selfId() { return selfId; },
     get roster() { return roster; },
     get transport() { return transport; },
-    isHost: () => hostOf(roster) === selfId,
+    isHost: () => hostOf(roster, preferredHost) === selfId,
+    get hostId() { return hostOf(roster, preferredHost); },
+    /** 방을 만든 사람이 자기 자신임을 확정할 때 */
+    claimHost(id) { preferredHost = id; },
     mySlotIndex: () => slotIndexOf(roster, selfId),
     send: (type, data) => impl.send(type, data),
     on(type, fn) { handlers.get(type)?.push(fn); },

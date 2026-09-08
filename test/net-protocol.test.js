@@ -35,6 +35,18 @@ test('hostOf: 방장이 나가면 다음 사람이 자동 승계', () => {
   assert.equal(hostOf(rosterOf('bbb', ['ccc'])), 'bbb');
 });
 
+test('hostOf: 지정된 방장(방을 만든 사람)이 명단에 있으면 정렬 순서를 이긴다', () => {
+  const r = rosterOf('zzz', ['aaa', 'mmm']);
+  assert.deepEqual(r, ['aaa', 'mmm', 'zzz']);
+  assert.equal(hostOf(r, 'zzz'), 'zzz', '지정 방장');
+  assert.equal(hostOf(r), 'aaa', '지정이 없으면 0번');
+});
+
+test('hostOf: 지정된 방장이 나가면 정렬 0번이 승계', () => {
+  const r = rosterOf('aaa', ['mmm']);
+  assert.equal(hostOf(r, 'zzz'), 'aaa');
+});
+
 test('makeRoomCode: 길이와 헷갈리는 문자 제외', () => {
   for (let i = 0; i < 200; i++) {
     const c = makeRoomCode(4);

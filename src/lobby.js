@@ -5,6 +5,15 @@ import { SLOT_COLORS } from './sprites.js';
 const params = () => new URLSearchParams(location.search);
 export const roomFromUrl = () => (params().get('room') || '').toUpperCase() || null;
 export const transportFromUrl = () => (params().get('transport') === 'bc' ? 'bc' : 'trystero');
+/** 초대 링크에 실린 방장 id (방을 만든 사람) */
+export const hostFromUrl = () => params().get('h') || null;
+
+/** 내가 방을 만들었음을 URL 에 새겨 초대 링크에 함께 실린다 */
+export function markSelfAsHost(id) {
+  const u = new URL(location.href);
+  u.searchParams.set('h', id);
+  history.replaceState(null, '', u.toString());
+}
 
 export function linkForRoom(code, transport) {
   const u = new URL(location.href);
@@ -53,11 +62,13 @@ export function showWaiting(hud, { code, transport, roster, selfId, isHost, botC
     return `<span style="color:${c.bolt}">●</span> P${i + 1}${me}`;
   }).join(' &nbsp; ');
 
-  // 시작은 누구나 누를 수 있다 — 방장은 무작위로 정해지므로 초대한 사람이 못 누르면 이상하다.
-  // 혼자여도 봇을 채워 바로 시작할 수 있고, 친구는 들어오는 대로 다음 라운드부터 합류한다.
+  // 시작은 방장(= 방을 만든 사람)만. 혼자여도 봇을 채워 시작할 수 있고,
+  // 친구는 들어오는 대로 다음 라운드부터 합류한다.
   const buttons = [];
-  if (n >= 2) buttons.push({ label: `시작 (${n}명)`, onClick: () => onStart({ fillBots: false }) });
-  else buttons.push({ label: `봇 넣고 시작 (봇 ${botCount}명)`, onClick: () => onStart({ fillBots: true }) });
+  if (isHost) {
+    if (n >= 2) buttons.push({ label: `시작 (${n}명)`, onClick: () => onStart({ fillBots: false }) });
+    else buttons.push({ label: `봇 넣고 시작 (봇 ${botCount}명)`, onClick: () => onStart({ fillBots: true }) });
+  }
   buttons.push({
     label: '초대 링크 복사',
     secondary: true,
@@ -74,7 +85,7 @@ export function showWaiting(hud, { code, transport, roster, selfId, isHost, botC
     : '';
   hud.showBanner({
     title: `방 ${code}`,
-    text: `${dots}<br><small>${n}/${MAX_PLAYERS} 명 · 누구나 시작할 수 있습니다${isHost ? ' (내가 방장)' : ''}</small>`
+    text: `${dots}<br><small>${n}/${MAX_PLAYERS} 명 · ${isHost ? '내가 방장 — 시작을 누르세요' : '방장이 시작하기를 기다립니다'}</small>`
       + waitingNote
       + `<br><small style="opacity:.5">${link}</small>`,
     buttons,

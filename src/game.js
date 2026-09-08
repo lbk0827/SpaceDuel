@@ -11,7 +11,7 @@ import { createHud } from './hud.js';
 import { createPanel } from './panel.js';
 import { SLOT_COLORS } from './sprites.js';
 import { createNet, MAX_PLAYERS } from './net.js';
-import { showStart, showSoloSetup, showWaiting, ensureRoom, roomFromUrl, transportFromUrl } from './lobby.js';
+import { showStart, showSoloSetup, showWaiting, ensureRoom, roomFromUrl, transportFromUrl, hostFromUrl, markSelfAsHost } from './lobby.js';
 
 await RAPIER.init();
 
@@ -455,10 +455,16 @@ function startOnline(opts) {
 
 async function startCoop() {
   const transport = transportFromUrl();
+  const creating = !roomFromUrl();          // URL 에 방이 없으면 내가 만드는 것
   const code = ensureRoom(transport);
   hud.showBanner({ title: '연결 중…', text: '방 ' + code });
   try {
-    net = await createNet({ roomCode: code, transport });
+    net = await createNet({ roomCode: code, transport, hostId: hostFromUrl() });
+    if (creating) {
+      // 방을 만든 사람이 방장 — 초대 링크에 내 id 를 실어 모두가 같은 결론을 내게 한다
+      net.claimHost(net.selfId);
+      markSelfAsHost(net.selfId);
+    }
   } catch (err) {
     hud.showBanner({
       title: '연결 실패',
