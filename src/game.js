@@ -423,9 +423,21 @@ function enterWaiting() {
   showWaiting(hud, {
     code: roomFromUrl(), transport: net.transport, roster: net.roster,
     selfId: net.selfId, isHost: net.isHost(), botCount: Math.max(1, tuning.botCount),
-    onStart: (opts) => { startOnline(opts); broadcastState('round'); },
+    onStart: (opts) => requestStart(opts),
     onSolo: () => showSoloSetup(hud, { current: tuning.botCount, onPick: startSolo, onBack: enterWaiting }),
   });
+}
+
+/** 누구나 누르는 시작. 방장이면 바로, 아니면 방장에게 요청을 보낸다 */
+function requestStart(opts) {
+  const fillBots = !!(opts && opts.fillBots);
+  if (isAuthority()) {
+    startOnline({ fillBots });
+    broadcastState('round');
+  } else {
+    net.send('state', { phase: 'startRequest', fillBots });
+    hud.showBanner({ title: '시작 요청', text: '방장에게 시작을 요청했습니다…' });
+  }
 }
 
 /** 방장만 호출. 사람 명단에 (원하면) 봇을 채워 슬롯 배치를 정하고 시작한다 */
@@ -467,6 +479,14 @@ async function startCoop() {
   });
   net.on('pose', applyPoses);
   net.on('state', (d) => {
+    // 누군가의 시작 요청 → 방장이 실제로 시작한다
+    if (d.phase === 'startRequest') {
+      if (isAuthority() && mode !== 'online') {
+        startOnline({ fillBots: !!d.fillBots });
+        broadcastState('round');
+      }
+      return;
+    }
     // 대기실에 있는 참가자는 방장의 첫 'round' 를 받고 입장한다(이 메시지가 유일한 계기다)
     if (mode !== 'online') {
       if (d.phase !== 'round') return;
@@ -503,5 +523,6 @@ window.__rd = {
   isHost: () => isAuthority(),
   selfId: () => (net ? net.selfId : null),
   owners: () => slotOwners,
+  requestStart,
   fire, startRound, startMatch, soloKinds, startSolo, startCoop, enterWaiting, startOnline, showLobby,
 };
