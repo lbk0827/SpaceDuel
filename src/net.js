@@ -27,7 +27,7 @@ export function makeRoomCode(len = 4) {
   return out;
 }
 
-const TYPES = ['fire', 'hit', 'pose', 'state', 'presence'];
+const TYPES = ['fire', 'hit', 'pose', 'state', 'item', 'presence'];
 
 export async function createNet({ roomCode, transport = 'trystero', hostId = null }) {
   const handlers = new Map(TYPES.map((t) => [t, []]));

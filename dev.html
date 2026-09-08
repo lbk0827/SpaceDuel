@@ -20,6 +20,8 @@
   .pips{display:flex;gap:4px}
   .pip{display:inline-block;width:12px;height:36px;border-radius:4px;box-shadow:0 0 0 2px #0008}
   #gaugeLabel{font-weight:700;color:#7dbdff;text-shadow:0 1px 2px #000}
+  #mods{display:flex;gap:6px;margin-left:6px}
+  .chip{border:1.5px solid;border-radius:6px;padding:2px 6px;font-size:11px;font-weight:700;background:#0009}
   #banner[hidden],#panel[hidden]{display:none}
   #banner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#0006;pointer-events:none}
   #banner .card{background:#141b3aee;border-radius:16px;padding:22px 30px;text-align:center;min-width:220px;box-shadow:0 8px 40px #000a;pointer-events:auto}
@@ -46,7 +48,7 @@
     <div id="app">
       <canvas id="game"></canvas>
       <div id="hud"><div id="scores"></div></div>
-      <div id="gaugeWrap"><div id="gauge" class="ring"></div><span id="gaugeLabel"></span></div>
+      <div id="gaugeWrap"><div id="gauge" class="ring"></div><span id="gaugeLabel"></span><span id="mods"></span></div>
       <div id="banner" hidden><div class="card"><h2 id="bannerTitle"></h2><p id="bannerText"></p><div id="bannerBtns"></div></div></div>
       <div id="hint">클릭 = 총구 방향으로 발사 · 반동으로 이동 · ` 튠 패널 <span id="build">__BUILD__</span></div>
     </div>

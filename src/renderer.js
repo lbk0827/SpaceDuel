@@ -1,5 +1,6 @@
 // Canvas 2D 렌더. 월드(원점 중심, y 위) → 화면(y 아래) 변환을 여기서 한 번만 한다.
 import { SLOT_COLORS, spriteFor } from './sprites.js';
+import { ITEM_DEFS, ITEM_RADIUS } from './items.js';
 
 const SVG_PX_PER_M = 100;
 const boltColor = (i) => SLOT_COLORS[i % SLOT_COLORS.length].bolt;
@@ -12,6 +13,7 @@ export function createRenderer(canvas, WORLD) {
 
   let scale = 60, cx = 0, cy = 0;
   const trails = [];   // { x0,y0,x1,y1, owner, age }
+  let elapsed = 0;
   const flashes = [];  // { x, y, age, kind:'muzzle'|'hit', owner }
 
   function fit() {
@@ -110,6 +112,91 @@ export function createRenderer(canvas, WORLD) {
     ctx.restore();
   }
 
+  /** 아이템 상자: 종류 색 + 글자. 살짝 떠 있는 느낌으로 흔든다 */
+  function drawItem(it, t) {
+    const def = ITEM_DEFS[it.kind] ?? { color: '#fff', short: '?' };
+    const bob = Math.sin(t * 2.2 + it.id) * 0.06;
+    const x = sx(it.x), y = sy(it.y + bob);
+    const r = ITEM_RADIUS * scale;
+    ctx.save();
+    ctx.shadowColor = def.color;
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = def.color;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x - r, y - r, r * 2, r * 2, r * 0.35) : ctx.rect(x - r, y - r, r * 2, r * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#0b1030';
+    ctx.font = `700 ${Math.max(8, r * 0.62)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.short[0], x, y + 1);
+    ctx.restore();
+  }
+
+  /** 배달 우주선 */
+  function drawShip(sh) {
+    const x = sx(sh.x), y = sy(sh.y);
+    const w = 1.6 * scale, h = 0.5 * scale;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(sh.dir, 1);
+    ctx.fillStyle = '#8ea2c8';
+    ctx.strokeStyle = '#243055';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, 0);
+    ctx.lineTo(-w / 4, -h / 2);
+    ctx.lineTo(w / 2, -h / 4);
+    ctx.lineTo(w / 2, h / 4);
+    ctx.lineTo(-w / 4, h / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#3b9dff';
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(w * 0.05 + i * h * 0.42, 0, h * 0.13, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 엔진 불꽃
+    ctx.fillStyle = '#ffd43b';
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, -h * 0.18);
+    ctx.lineTo(-w / 2 - h * (0.5 + Math.random() * 0.4), 0);
+    ctx.lineTo(-w / 2, h * 0.18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** 배리어: 남은 횟수만큼 몸 주변 호 */
+  function drawBarrier(slot, shape) {
+    const n = slot.mods && slot.mods.barrier ? slot.mods.barrier : 0;
+    if (!n) return;
+    const r = ((shape && shape.halfHeight ? shape.halfHeight : 0) + (shape && shape.radius ? shape.radius : 0.45) + 0.22) * scale;
+    const x = sx(slot.snap.pose.x), y = sy(slot.snap.pose.y);
+    ctx.save();
+    ctx.strokeStyle = ITEM_DEFS.barrier.color;
+    ctx.shadowColor = ITEM_DEFS.barrier.color;
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 3;
+    for (let i = 0; i < n; i++) {
+      const span = (Math.PI * 2) / n;
+      const gap = 0.22;
+      ctx.beginPath();
+      ctx.arc(x, y, r + i * 4, i * span + gap / 2, (i + 1) * span - gap / 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   return {
     canvas,
     setArena(next) { arena = next; fit(); },
@@ -145,8 +232,14 @@ export function createRenderer(canvas, WORLD) {
       ctx.globalAlpha = 1;
 
       // 몸 (살아 있고 자세를 얻은 슬롯만)
+      // 아이템·배달선 (몸보다 아래 레이어)
+      elapsed += dtReal;
+      if (view.items) for (const it of view.items) drawItem(it, elapsed);
+      if (view.ship) drawShip(view.ship);
+
       const shown = view.slots.filter((s) => s.alive && s.snap);
-      for (const s of shown) if (s.isLocal) drawYouMarker(s, view.shape);   // 링은 몸 아래에
+      for (const s of shown) drawBarrier(s, view.shape);
+      for (const s of shown) if (s.isLocal) drawYouMarker(s, view.shape);
       for (const s of shown) drawBody(s, view.tuning, view.shape);
       for (const s of shown) drawGauge(s, s.gauge, view.shape);
 
@@ -166,12 +259,19 @@ export function createRenderer(canvas, WORLD) {
       // 플래시
       for (let i = flashes.length - 1; i >= 0; i--) {
         const f = flashes[i]; f.age += dtReal;
-        const dur = f.kind === 'hit' ? 0.5 : 0.1;
+        const dur = f.kind === 'hit' ? 0.5 : f.kind === 'block' ? 0.35 : f.kind === 'item' ? 0.4 : 0.1;
         const k = 1 - f.age / dur;
         if (k <= 0) { flashes.splice(i, 1); continue; }
         ctx.globalAlpha = k;
         ctx.strokeStyle = ctx.fillStyle = boltColor(f.ownerIndex);
         if (f.kind === 'hit') { ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(sx(f.x), sy(f.y), (1 - k) * 1.2 * scale + 6, 0, Math.PI * 2); ctx.stroke(); }
+        else if (f.kind === 'block') {
+          ctx.strokeStyle = ITEM_DEFS.barrier.color; ctx.lineWidth = 5;
+          ctx.beginPath(); ctx.arc(sx(f.x), sy(f.y), (1 - k) * 0.7 * scale + 8, 0, Math.PI * 2); ctx.stroke();
+        } else if (f.kind === 'item') {
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(sx(f.x), sy(f.y), (1 - k) * 1.0 * scale + 4, 0, Math.PI * 2); ctx.stroke();
+        }
         else { ctx.beginPath(); ctx.arc(sx(f.x), sy(f.y), 0.18 * scale * (0.5 + k), 0, Math.PI * 2); ctx.fill(); }
       }
       ctx.globalAlpha = 1;

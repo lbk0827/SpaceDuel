@@ -1,11 +1,13 @@
 // DOM HUD: 슬롯별 점수, 내 발사 게이지, 배너. 게임 규칙을 모른다.
 import { SLOT_COLORS } from './sprites.js';
+import { ITEM_DEFS } from './items.js';
 
 export function createHud(root) {
   const $ = (id) => root.querySelector(`#${id}`);
   const scores = $('scores'), gauge = $('gauge'), gaugeLabel = $('gaugeLabel');
   const banner = $('banner'), bannerTitle = $('bannerTitle'), bannerText = $('bannerText'), bannerBtns = $('bannerBtns');
-  let lastScoreKey = '', lastGaugeKey = '';
+  const modsEl = root.querySelector('#mods');
+  let lastScoreKey = '', lastGaugeKey = '', lastModsKey = '';
 
   return {
     /** slots: [{ index, kind, score, alive, isLocal, label }] */
@@ -51,6 +53,29 @@ export function createHud(root) {
         }));
         gaugeLabel.textContent = `${full}/${s.max}`;
       }
+    },
+
+    /** 내가 가진 아이템 효과 */
+    setMods(mods) {
+      if (!modsEl) return;
+      const key = mods ? Object.keys(ITEM_DEFS).map((k) => k + (mods[k] || 0)).join('') : 'none';
+      if (key === lastModsKey) return;
+      lastModsKey = key;
+      const chips = [];
+      if (mods) {
+        for (const k of Object.keys(ITEM_DEFS)) {
+          const n = mods[k] || 0;
+          if (!n) continue;
+          const def = ITEM_DEFS[k];
+          const el = document.createElement('span');
+          el.className = 'chip';
+          el.style.color = def.color;
+          el.style.borderColor = def.color;
+          el.textContent = `${def.short} ${n}`;
+          chips.push(el);
+        }
+      }
+      modsEl.replaceChildren(...chips);
     },
 
     showBanner({ title, text = '', buttons = [], color }) {

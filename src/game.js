@@ -10,6 +10,10 @@ import { createRenderer } from './renderer.js';
 import { createHud } from './hud.js';
 import { createPanel } from './panel.js';
 import { SLOT_COLORS } from './sprites.js';
+import {
+  emptyMods, applyItem, consumeBarrier, effectiveStats,
+  spawnShip, stepShip, stepItems, pickups, nextKind,
+} from './items.js';
 import { createNet, MAX_PLAYERS } from './net.js';
 import { showStart, showSoloSetup, showWaiting, ensureRoom, roomFromUrl, transportFromUrl, hostFromUrl, markSelfAsHost } from './lobby.js';
 
@@ -37,9 +41,12 @@ function buildSlots(kinds) {
     label: kind === 'local' ? 'YOU' : kind === 'bot' ? 'BOT' + index : 'P' + (index + 1),
     score: 0,
     alive: true,
-    gate: createFireGate(tuning),
+    gate: null,
+    mods: emptyMods(),
     aiMem: { onTargetSince: null, lastGoodAt: 0 },
   }));
+  // 아이템(탄창)이 발사 방식을 바꾸므로 게이트는 슬롯별 설정을 본다
+  for (const s of slots) s.gate = createFireGate(fireCfgFor(s));
   localSlot = slots.find((s) => s.kind === 'local') ?? null;
 }
 
@@ -63,6 +70,30 @@ const ownsSlot = (id) => {
   if (s.kind === 'local') return true;
   return s.kind === 'bot' && isAuthority();
 };
+
+// ---- 아이템 ----
+let items = [];
+let ship = null;
+let shipTimer = 0;
+let nextItemId = 1;
+let kindCounter = 0;
+
+/** 슬롯 하나의 유효 수치(아이템 효과 반영) */
+const statsFor = (slot) => effectiveStats(slot.mods, {
+  laserSpeed: tuning.laserSpeed * arena.speedScale,
+  fireMode: tuning.fireMode,
+  energyMax: tuning.energyMax,
+}, tuning);
+
+/** FireGate 가 읽는 설정 — 탄창을 먹으면 에너지(연사) 모드가 된다 */
+function fireCfgFor(slot) {
+  return {
+    get fireMode() { return statsFor(slot).fireMode; },
+    get cooldown() { return tuning.cooldown; },
+    get energyMax() { return statsFor(slot).energyMax; },
+    get energyRegen() { return tuning.energyRegen; },
+  };
+}
 
 // ---- 상태 ----
 let round = 0;
@@ -96,6 +127,8 @@ function startRound() {
     s.aiMem.lastGoodAt = 0;
   }
   bolts = [];
+  items = []; ship = null; shipTimer = 0;
+  for (const s of slots) s.mods = emptyMods();
   renderer.clearEffects();
   gameTime = 0; timeScale = 1; acc = 0;
   state = 'playing';
@@ -120,7 +153,7 @@ function fire(slotId, override = null) {
   if (!slot.gate.tryFire()) return null;
 
   const m = override ?? muzzleOf(snap, tuning);
-  const speed = effLaserSpeed();
+  const speed = statsFor(slot).laserSpeed;
   bolts.push({
     id: nextBoltId++, owner: slotId, ownerIndex: slot.index,
     x: m.pos.x + m.dir.x * 0.15, y: m.pos.y + m.dir.y * 0.15,
@@ -176,7 +209,7 @@ function fixedStep(dt) {
       if (!target) continue;
       const threats = tuning.aiDodgeLookahead > 0 ? bolts.filter((b) => b.owner !== s.id) : [];
       const d = decide(snap, target, {
-        ...tuning, laserSpeed: effLaserSpeed(), recoilImpulse: effRecoil(),
+        ...tuning, laserSpeed: statsFor(s).laserSpeed, recoilImpulse: effRecoil(),
         now: gameTime, canFire: s.gate.canFire(), cap: shape, bolts: threats,
       }, s.aiMem);
       if (d.fire) {
@@ -185,6 +218,10 @@ function fixedStep(dt) {
       }
     }
   }
+
+  // 아이템 (방장만 생성·획득을 판정하고 결과를 알린다)
+  if (tuning.itemsEnabled && isAuthority()) stepItemWorld(dt);
+  else items = stepItems(items, dt, tuning.itemLifetime);
 
   // 탄
   const targets = targetsOf();
@@ -212,6 +249,14 @@ function fixedStep(dt) {
 function applyHit({ shooter, ownerIndex, targetId, point }) {
   const victim = slotById(targetId);
   if (!victim || !victim.alive) return;
+  // 배리어가 있으면 1회 막고 살아남는다
+  const guard = consumeBarrier(victim.mods);
+  if (guard.blocked) {
+    victim.mods = guard.mods;
+    renderer.addFlash(point.x, point.y, 'block', victim.index);
+    syncScores();
+    return;
+  }
   victim.alive = false;
   physics.removeBody(victim.id);
   const idx = ownerIndex ?? (slotById(shooter) ? slotById(shooter).index : 0);
@@ -257,6 +302,63 @@ function checkRoundEnd() {
   broadcastState('roundEnd', { winner: winner.index });
   hud.showBanner({ title: winner.label + ' 라운드 획득', text: scoreLine(), color });
   setTimeout(() => { round++; startRound(); broadcastState('round'); }, 1500);
+}
+
+// ---- 아이템 월드 (방장 권한) ----
+function stepItemWorld(dt) {
+  items = stepItems(items, dt, tuning.itemLifetime);
+
+  if (!ship) {
+    shipTimer += dt;
+    if (shipTimer >= tuning.itemShipInterval) {
+      shipTimer = 0;
+      ship = spawnShip(arena, tuning);
+      if (net) net.send('item', { op: 'ship', ship });
+    }
+  } else {
+    const r = stepShip(ship, dt, arena);
+    ship = r.ship;
+    for (const d of r.drops) {
+      const it = { id: nextItemId++, kind: nextKind(kindCounter++), x: d.x, y: d.y, age: 0 };
+      items.push(it);
+      if (net) net.send('item', { op: 'spawn', item: it });
+    }
+  }
+
+  const bodies = [];
+  for (const s of aliveSlots()) {
+    const snap = physics.get(s.id);
+    if (snap) bodies.push({ id: s.id, x: snap.pose.x, y: snap.pose.y, radius: shape.radius ?? 0.45 });
+  }
+  const got = pickups(items, bodies);
+  if (got.length) {
+    const taken = new Set(got.map((p) => p.itemId));
+    items = items.filter((it) => !taken.has(it.id));
+    for (const p of got) {
+      grantItem(p.slotId, p.kind);
+      if (net) net.send('item', { op: 'pickup', itemId: p.itemId, slot: p.slotId, kind: p.kind });
+    }
+  }
+}
+
+function grantItem(slotId, kind) {
+  const slot = slotById(slotId);
+  if (!slot) return;
+  slot.mods = applyItem(slot.mods, kind);
+  const snap = physics.get(slotId);
+  if (snap) renderer.addFlash(snap.pose.x, snap.pose.y, 'item', slot.index);
+  syncScores();
+}
+
+/** 방장이 보내온 아이템 사건을 따른다 */
+function applyItemMessage(d) {
+  if (isAuthority() || !d) return;
+  if (d.op === 'ship') { ship = d.ship; return; }
+  if (d.op === 'spawn') { if (d.item) items = [...items, d.item]; return; }
+  if (d.op === 'pickup') {
+    items = items.filter((it) => it.id !== d.itemId);
+    grantItem(d.slot, d.kind);
+  }
 }
 
 // ---- 네트워크 배선 ----
@@ -374,9 +476,11 @@ function frame(now) {
     id: s.id, index: s.index, alive: s.alive, isLocal: s.kind === 'local',
     snap: s.alive ? physics.get(s.id) : null,
     gauge: s.alive ? s.gate.state() : null,
+    mods: s.mods,
   }));
-  renderer.render({ slots: view, bolts, timeScale, tuning, shape }, dtReal);
+  renderer.render({ slots: view, bolts, items, ship, timeScale, tuning, shape }, dtReal);
   hud.setGauge(localSlot && localSlot.alive ? localSlot.gate.state() : null);
+  hud.setMods(localSlot && localSlot.alive ? localSlot.mods : null);
   requestAnimationFrame(frame);
 }
 
@@ -484,6 +588,7 @@ async function startCoop() {
     if (isAuthority()) checkRoundEnd();
   });
   net.on('pose', applyPoses);
+  net.on('item', applyItemMessage);
   net.on('state', (d) => {
     // 누군가의 시작 요청 → 방장이 실제로 시작한다
     if (d.phase === 'startRequest') {
@@ -529,6 +634,12 @@ window.__rd = {
   isHost: () => isAuthority(),
   selfId: () => (net ? net.selfId : null),
   owners: () => slotOwners,
+  tuning,
+  items: () => items,
+  ship: () => ship,
+  shipTimer: () => shipTimer,
+  mods: () => slots.map((s) => Object.assign({ id: s.id }, s.mods)),
+  grantItem,
   requestStart,
   fire, startRound, startMatch, soloKinds, startSolo, startCoop, enterWaiting, startOnline, showLobby,
 };
